@@ -51,6 +51,9 @@ android.archs = arm64-v8a
 # (bool) enables Android auto backup feature
 android.allow_backup = True
 
+# (str) python-for-android branch to use
+p4a.branch = master
+
 [buildozer]
 
 # (int) Log level (0 = error only, 1 = info, 2 = debug)
