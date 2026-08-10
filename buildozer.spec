@@ -21,6 +21,9 @@ version = 0.1
 # (list) Application requirements
 requirements = python3,kivy,openpyxl
 
+# (str) Python version to use for python-for-android
+p4a.python_version = 3.11
+
 # (list) Supported orientations
 orientation = portrait
 
@@ -50,9 +53,6 @@ android.archs = arm64-v8a
 
 # (bool) enables Android auto backup feature
 android.allow_backup = True
-
-# (str) python-for-android branch to use
-p4a.branch = master
 
 [buildozer]
 
