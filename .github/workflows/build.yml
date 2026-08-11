@@ -14,7 +14,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Setup Java (JDK 17)
         uses: actions/setup-java@v4
@@ -30,17 +30,25 @@ jobs:
             zlib1g-dev libncurses5-dev libncursesw5-dev libstdc++6 make \
             libffi-dev libssl-dev libltdl-dev
 
-      - name: Install Buildozer and Cython
+      - name: Install Buildozer and Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade cython==0.29.36 buildozer
+          pip install --upgrade Cython virtualenv buildozer
 
       - name: Build APK with Buildozer
         run: |
-          buildozer -v android debug
+          buildozer -v android debug > buildozer_log.txt 2>&1
+
+      - name: Upload Build Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Buildozer-Log
+          path: buildozer_log.txt
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: InventoryApp-APK
           path: bin/*.apk
