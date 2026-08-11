@@ -1,4 +1,4 @@
-%%writefile main.py
+
 import os
 import openpyxl
 from kivy.app import App
