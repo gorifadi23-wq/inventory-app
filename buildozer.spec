@@ -19,10 +19,7 @@ source.include_exts = py,png,jpg,kv,atlas,xlsx,xls
 version = 0.1
 
 # (list) Application requirements
-requirements = python3,kivy,openpyxl
-
-# (str) Python version to use for python-for-android
-p4a.python_version = 3.11
+requirements = python3,kivy,openpyxl,plyer
 
 # (list) Supported orientations
 orientation = portrait
