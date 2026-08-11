@@ -7,10 +7,10 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
 from kivy.utils import platform
-from plyer import filechooser
 
 class InventoryApp(App):
     def build(self):
+        # طلب صلاحيات التخزين عند الفتح
         if platform == 'android':
             from android.permissions import request_permissions, Permission
             request_permissions([
@@ -20,28 +20,29 @@ class InventoryApp(App):
 
         self.title = "Inventory App"
         
-        # التصميم الرئيسي
         root_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
-        # زر اختيار الملف
-        self.btn_select = Button(
-            text="Select Excel File",
+        # زر تحميل الملف من مجلد التنزيلات
+        self.btn_load = Button(
+            text="Load inventory.xlsx from Download",
             size_hint_y=None,
             height=120,
             background_color=(0.2, 0.6, 1, 1)
         )
-        self.btn_select.bind(on_press=self.open_file_chooser)
-        root_layout.add_widget(self.btn_select)
+        self.btn_load.bind(on_press=self.load_from_download)
+        root_layout.add_widget(self.btn_load)
         
-        # تسمية الحالة
+        # تسمية لحالة الملف أو الرسائل
         self.lbl_status = Label(
-            text="Please select an Excel file to view data",
+            text="Put 'inventory.xlsx' in your Download folder, then click the button.",
             size_hint_y=None,
-            height=60
+            height=80,
+            text_size=(700, None)
         )
+        self.lbl_status.bind(size=lambda s, w: setattr(s, 'text_size', (w, None)))
         root_layout.add_widget(self.lbl_status)
         
-        # منطقة عرض بيانات الإكسل مع إمكانية التمرير
+        # منطقة عرض البيانات مع إمكانية التمرير
         self.data_layout = GridLayout(cols=1, spacing=5, size_hint_y=None)
         self.data_layout.bind(minimum_height=self.data_layout.setter('height'))
         
@@ -51,21 +52,22 @@ class InventoryApp(App):
         
         return root_layout
 
-    def open_file_chooser(self, instance):
-        filechooser.open_file(
-            on_selection=self.handle_selection,
-            filters=[("Excel Files", "*.xlsx", "*.xls")]
-        )
-
-    def handle_selection(self, selection):
-        if selection:
-            file_path = selection[0]
-            self.btn_select.text = "File Selected Successfully"
-            self.load_excel_data(file_path)
-
-    def load_excel_data(self, file_path):
+    def load_from_download(self, instance):
         try:
             self.data_layout.clear_widgets()
+            
+            # تحديد مسار ملف الإكسل تلقائياً حسب الجهاز
+            if platform == 'android':
+                file_path = '/storage/emulated/0/Download/inventory.xlsx'
+            else:
+                file_path = 'inventory.xlsx'  # للتجربة على الكمبيوتر
+            
+            # التحقق من وجود الملف
+            if not os.path.exists(file_path):
+                self.lbl_status.text = "File not found in Download folder!\nPlease place 'inventory.xlsx' in Download."
+                return
+
+            # قراءة ملف الإكسل
             wb = openpyxl.load_workbook(file_path)
             sheet = wb.active
             
@@ -82,9 +84,9 @@ class InventoryApp(App):
                     self.data_layout.add_widget(lbl)
                     row_count += 1
                     
-            self.lbl_status.text = f"Loaded {row_count} rows successfully"
+            self.lbl_status.text = f"Successfully loaded {row_count} rows from Download!"
         except Exception as e:
-            self.lbl_status.text = f"Error reading file: {str(e)}"
+            self.lbl_status.text = f"Error: {str(e)}"
 
 if __name__ == '__main__':
     InventoryApp().run()
