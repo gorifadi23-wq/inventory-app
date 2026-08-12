@@ -9,22 +9,23 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.core.window import Window
 from kivy.graphics import Color, RoundedRectangle, Rectangle
 from kivy.clock import Clock
+from kivy.metrics import dp, sp  # سر الاحترافية لتكييف الأحجام مع شاشات الهواتف
 
-# مكتبات اللغة العربية
 import arabic_reshaper
 from bidi.algorithm import get_display
 
-Window.clearcolor = (0.95, 0.95, 0.95, 1)
+# خلفية رمادية فاتحة عصرية
+Window.clearcolor = (0.94, 0.94, 0.96, 1)
 
 class HeaderLayout(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.orientation = 'horizontal'
         self.size_hint_y = None
-        self.height = 70
-        self.padding = 10
+        self.height = dp(75) # ارتفاع مناسب للشريط العلوي
+        self.padding = dp(15)
         with self.canvas.before:
-            Color(0.12, 0.35, 0.71, 1)
+            Color(0.12, 0.35, 0.71, 1) # أزرق احترافي
             self.rect = Rectangle()
         self.bind(pos=self.update_rect, size=self.update_rect)
 
@@ -37,29 +38,33 @@ class CardLayout(BoxLayout):
         super().__init__(**kwargs)
         self.orientation = 'horizontal'
         self.size_hint_y = None
-        self.height = 65
-        self.padding = [15, 0, 15, 0]
+        self.height = dp(90) # ارتفاع أكبر للبطاقة لراحة العين
+        self.padding = [dp(15), dp(10), dp(15), dp(10)]
         
         with self.canvas.before:
             Color(1, 1, 1, 1)
-            self.rect = RoundedRectangle(radius=[12])
+            # حواف دائرية ناعمة للبطاقة
+            self.rect = RoundedRectangle(radius=[dp(12)])
         self.bind(pos=self.update_rect, size=self.update_rect)
         
-        # معالجة النص العربي لشبك الحروف وعكس الاتجاه
+        # معالجة النص العربي
         reshaped_text = arabic_reshaper.reshape(text)
         bidi_text = get_display(reshaped_text)
         
-        lbl = Label(
+        self.lbl = Label(
             text=bidi_text,
             font_name=font_path if os.path.exists(font_path) else 'Roboto',
             color=(0.15, 0.15, 0.15, 1),
-            bold=True,
-            font_size=16,
-            halign='right', # محاذاة لليمين
+            font_size=sp(16), # حجم خط ديناميكي كبير
+            halign='right',
             valign='middle'
         )
-        lbl.bind(size=lbl.setter('text_size'))
-        self.add_widget(lbl)
+        # ربط حجم النص بحجم البطاقة لمنع الخروج عن الحدود (التفاف تلقائي)
+        self.lbl.bind(size=self.update_text_size)
+        self.add_widget(self.lbl)
+
+    def update_text_size(self, instance, size):
+        instance.text_size = (size[0], size[1])
 
     def update_rect(self, *args):
         self.rect.pos = self.pos
@@ -68,49 +73,67 @@ class CardLayout(BoxLayout):
 class FadiInventoryApp(App):
     def build(self):
         self.title = "Inventory App"
-        self.all_data = [] # لتخزين البيانات في الذاكرة لتسريع البحث
+        self.all_data = []
         
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.font_path = os.path.join(current_dir, 'font.ttf')
         
-        main_box = BoxLayout(orientation='vertical', spacing=10)
+        main_box = BoxLayout(orientation='vertical', spacing=dp(10))
         
         # 1. الشريط العلوي
         header = HeaderLayout()
-        header_title = Label(text="INVENTORY SYSTEM", color=(1, 1, 1, 1), bold=True, font_size=20)
+        header_title = Label(
+            text="INVENTORY SYSTEM", 
+            color=(1, 1, 1, 1), 
+            bold=True, 
+            font_size=sp(20)
+        )
         header.add_widget(header_title)
         main_box.add_widget(header)
         
-        # 2. مربع البحث الذكي
+        # 2. مربع البحث الذكي (تصميم احترافي غير مقطوع)
+        search_hint = get_display(arabic_reshaper.reshape('بحث ذكي عن المواد...'))
         self.search_input = TextInput(
-            hint_text='Search / بحث...',
+            hint_text=search_hint,
             font_name=self.font_path if os.path.exists(self.font_path) else 'Roboto',
             size_hint_y=None,
-            height=50,
+            height=dp(60), # ارتفاع كافي جداً
+            font_size=sp(18), # خط كبير للكتابة
             multiline=False,
-            padding_y=[15, 15],
-            padding_x=[15, 15]
+            padding=[dp(15), dp(15), dp(15), dp(15)],
+            halign='right',
+            background_normal='', # إزالة الظل الافتراضي المزعج
+            background_color=(1, 1, 1, 1),
+            foreground_color=(0.1, 0.1, 0.1, 1),
+            cursor_color=(0.12, 0.35, 0.71, 1)
         )
-        # تشغيل البحث تلقائياً عند كتابة أي حرف
         self.search_input.bind(text=self.on_search_change)
-        main_box.add_widget(self.search_input)
+        
+        # حاوية لمربع البحث لإعطائه هوامش جانبية
+        search_container = BoxLayout(size_hint_y=None, height=dp(60), padding=[dp(15), 0, dp(15), 0])
+        search_container.add_widget(self.search_input)
+        main_box.add_widget(search_container)
         
         # 3. شريط الحالة
+        status_text = get_display(arabic_reshaper.reshape("جاري تحضير الواجهة..."))
         self.info_label = Label(
-            text="App Opened. Preparing Data...",
-            size_hint_y=None, height=30, color=(0.12, 0.35, 0.71, 1), font_name=self.font_path if os.path.exists(self.font_path) else 'Roboto'
+            text=status_text,
+            size_hint_y=None, 
+            height=dp(30), 
+            color=(0.12, 0.35, 0.71, 1), 
+            font_size=sp(16),
+            font_name=self.font_path if os.path.exists(self.font_path) else 'Roboto'
         )
         main_box.add_widget(self.info_label)
         
         # 4. شبكة البيانات
-        self.data_grid = GridLayout(cols=1, spacing=10, padding=[15, 5, 15, 15], size_hint_y=None)
+        self.data_grid = GridLayout(cols=1, spacing=dp(10), padding=[dp(15), dp(5), dp(15), dp(15)], size_hint_y=None)
         self.data_grid.bind(minimum_height=self.data_grid.setter('height'))
         
         scroll = ScrollView(size_hint=(1, 1))
         scroll.add_widget(self.data_grid)
         main_box.add_widget(scroll)
         
-        # جدولة قراءة الملف
         Clock.schedule_once(self.load_excel_data, 0.5)
         
         return main_box
@@ -127,32 +150,26 @@ class FadiInventoryApp(App):
             self.info_label.color = (0.9, 0.1, 0.1, 1)
             return
             
-        if not os.path.exists(self.font_path):
-            print("Warning: font.ttf is missing, Arabic text may appear corrupted.")
-
         try:
             workbook = openpyxl.load_workbook(excel_file, data_only=True)
             sheet = workbook.active
             
-            # قراءة كل الإكسل وتخزينه في الذاكرة مرة واحدة فقط
             for row in sheet.iter_rows(values_only=True):
                 row_values = [str(cell) for cell in row if cell is not None]
                 if row_values:
                     self.all_data.append("  |  ".join(row_values))
                     
-            self.update_ui("") # عرض المنتجات للمرة الأولى
+            self.update_ui("")
                 
         except Exception as e:
             self.info_label.text = f"Error: {str(e)[:40]}" 
             self.info_label.color = (0.9, 0.1, 0.1, 1)
 
     def on_search_change(self, instance, value):
-        # استدعاء تحديث الواجهة عند كتابة أي حرف
         self.update_ui(value)
 
     def update_ui(self, search_text):
         self.data_grid.clear_widgets()
-        # تفكيك نص البحث إلى كلمات منفصلة لتطبيق "البحث الذكي"
         search_terms = search_text.lower().split()
         
         displayed_count = 0
@@ -160,14 +177,12 @@ class FadiInventoryApp(App):
             match = True
             item_lower = item.lower()
             
-            # التحقق مما إذا كانت *جميع* الكلمات المدخلة موجودة في هذا الصف (مهما كان الترتيب)
             for term in search_terms:
                 if term not in item_lower:
                     match = False
                     break
                     
             if match:
-                # حد أمان لمنع انهيار الشاشة عند عرض أعداد ضخمة
                 if displayed_count >= 200:
                     break
                 card = CardLayout(text=item, font_path=self.font_path)
