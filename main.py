@@ -6,43 +6,36 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
-from kivy.utils import platform
+from kivy.network.urlrequest import UrlRequest
 
 class InventoryApp(App):
     def build(self):
-        # طلب صلاحيات التخزين عند الفتح
-        if platform == 'android':
-            from android.permissions import request_permissions, Permission
-            request_permissions([
-                Permission.READ_EXTERNAL_STORAGE,
-                Permission.WRITE_EXTERNAL_STORAGE
-            ])
-
         self.title = "Inventory App"
+        
+        # إنشاء مسار آمن ومخفي داخل التطبيق لحفظ الإكسل بدون الحاجة لصلاحيات الأندرويد
+        self.file_path = os.path.join(self.user_data_dir, 'inventory.xlsx')
         
         root_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
-        # زر تحميل الملف من مجلد التنزيلات
-        self.btn_load = Button(
-            text="Load inventory.xlsx from Download",
+        # زر التحديث السحري
+        self.btn_update = Button(
+            text="Update Data (Download new Excel)",
             size_hint_y=None,
             height=120,
-            background_color=(0.2, 0.6, 1, 1)
+            background_color=(0.2, 0.8, 0.2, 1)  # لون أخضر للزر
         )
-        self.btn_load.bind(on_press=self.load_from_download)
-        root_layout.add_widget(self.btn_load)
+        self.btn_update.bind(on_press=self.download_update)
+        root_layout.add_widget(self.btn_update)
         
-        # تسمية لحالة الملف أو الرسائل
+        # تسمية لحالة التطبيق
         self.lbl_status = Label(
-            text="Put 'inventory.xlsx' in your Download folder, then click the button.",
+            text="Welcome! Checking for data...",
             size_hint_y=None,
-            height=80,
-            text_size=(700, None)
+            height=60
         )
-        self.lbl_status.bind(size=lambda s, w: setattr(s, 'text_size', (w, None)))
         root_layout.add_widget(self.lbl_status)
         
-        # منطقة عرض البيانات مع إمكانية التمرير
+        # منطقة عرض البيانات
         self.data_layout = GridLayout(cols=1, spacing=5, size_hint_y=None)
         self.data_layout.bind(minimum_height=self.data_layout.setter('height'))
         
@@ -50,25 +43,42 @@ class InventoryApp(App):
         scroll.add_widget(self.data_layout)
         root_layout.add_widget(scroll)
         
+        # التحقق مما إذا كان الملف موجوداً مسبقاً لعرضه مباشرة
+        if os.path.exists(self.file_path):
+            self.load_excel_data()
+        else:
+            self.lbl_status.text = "No data found. Please click Update!"
+            
         return root_layout
 
-    def load_from_download(self, instance):
+    def download_update(self, instance):
+        self.lbl_status.text = "Downloading new data... Please wait."
+        self.btn_update.disabled = True
+        
+        # هذا هو الرابط المباشر لملف الإكسل من مستودعك الذي رأيته في صورتك
+        url = "https://raw.githubusercontent.com/gorifadi23-wq/inventory-app/main/inventory.xlsx"
+        
+        UrlRequest(
+            url,
+            on_success=self.on_download_success,
+            on_error=self.on_download_error,
+            on_failure=self.on_download_error,
+            file_path=self.file_path
+        )
+
+    def on_download_success(self, req, result):
+        self.btn_update.disabled = False
+        self.lbl_status.text = "Update Downloaded Successfully!"
+        self.load_excel_data()
+
+    def on_download_error(self, req, error):
+        self.btn_update.disabled = False
+        self.lbl_status.text = "Error! Please check your internet connection."
+
+    def load_excel_data(self):
         try:
             self.data_layout.clear_widgets()
-            
-            # تحديد مسار ملف الإكسل تلقائياً حسب الجهاز
-            if platform == 'android':
-                file_path = '/storage/emulated/0/Download/inventory.xlsx'
-            else:
-                file_path = 'inventory.xlsx'  # للتجربة على الكمبيوتر
-            
-            # التحقق من وجود الملف
-            if not os.path.exists(file_path):
-                self.lbl_status.text = "File not found in Download folder!\nPlease place 'inventory.xlsx' in Download."
-                return
-
-            # قراءة ملف الإكسل
-            wb = openpyxl.load_workbook(file_path)
+            wb = openpyxl.load_workbook(self.file_path)
             sheet = wb.active
             
             row_count = 0
@@ -84,9 +94,9 @@ class InventoryApp(App):
                     self.data_layout.add_widget(lbl)
                     row_count += 1
                     
-            self.lbl_status.text = f"Successfully loaded {row_count} rows from Download!"
+            self.lbl_status.text = f"Loaded {row_count} rows successfully!"
         except Exception as e:
-            self.lbl_status.text = f"Error: {str(e)}"
+            self.lbl_status.text = f"Error reading file: {str(e)}"
 
 if __name__ == '__main__':
     InventoryApp().run()
