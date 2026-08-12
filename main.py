@@ -2,40 +2,25 @@ import os
 import openpyxl
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
-from kivy.network.urlrequest import UrlRequest
 
 class InventoryApp(App):
     def build(self):
         self.title = "Inventory App"
         
-        # إنشاء مسار آمن ومخفي داخل التطبيق لحفظ الإكسل بدون الحاجة لصلاحيات الأندرويد
-        self.file_path = os.path.join(self.user_data_dir, 'inventory.xlsx')
-        
         root_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
-        # زر التحديث السحري
-        self.btn_update = Button(
-            text="Update Data (Download new Excel)",
-            size_hint_y=None,
-            height=120,
-            background_color=(0.2, 0.8, 0.2, 1)  # لون أخضر للزر
-        )
-        self.btn_update.bind(on_press=self.download_update)
-        root_layout.add_widget(self.btn_update)
-        
-        # تسمية لحالة التطبيق
+        # تسمية لحالة التطبيق وعرض عدد الصفوف
         self.lbl_status = Label(
-            text="Welcome! Checking for data...",
+            text="Loading inventory data...",
             size_hint_y=None,
             height=60
         )
         root_layout.add_widget(self.lbl_status)
         
-        # منطقة عرض البيانات
+        # منطقة عرض بيانات الإكسل مع إمكانية التمرير
         self.data_layout = GridLayout(cols=1, spacing=5, size_hint_y=None)
         self.data_layout.bind(minimum_height=self.data_layout.setter('height'))
         
@@ -43,42 +28,25 @@ class InventoryApp(App):
         scroll.add_widget(self.data_layout)
         root_layout.add_widget(scroll)
         
-        # التحقق مما إذا كان الملف موجوداً مسبقاً لعرضه مباشرة
-        if os.path.exists(self.file_path):
-            self.load_excel_data()
-        else:
-            self.lbl_status.text = "No data found. Please click Update!"
-            
+        # تحميل الملف مباشرة من حزمة التطبيق
+        self.load_bundled_excel()
+        
         return root_layout
 
-    def download_update(self, instance):
-        self.lbl_status.text = "Downloading new data... Please wait."
-        self.btn_update.disabled = True
-        
-        # هذا هو الرابط المباشر لملف الإكسل من مستودعك الذي رأيته في صورتك
-        url = "https://raw.githubusercontent.com/gorifadi23-wq/inventory-app/main/inventory.xlsx"
-        
-        UrlRequest(
-            url,
-            on_success=self.on_download_success,
-            on_error=self.on_download_error,
-            on_failure=self.on_download_error,
-            file_path=self.file_path
-        )
-
-    def on_download_success(self, req, result):
-        self.btn_update.disabled = False
-        self.lbl_status.text = "Update Downloaded Successfully!"
-        self.load_excel_data()
-
-    def on_download_error(self, req, error):
-        self.btn_update.disabled = False
-        self.lbl_status.text = "Error! Please check your internet connection."
-
-    def load_excel_data(self):
+    def load_bundled_excel(self):
         try:
             self.data_layout.clear_widgets()
-            wb = openpyxl.load_workbook(self.file_path)
+            
+            # مسار الملف المدمج داخل التطبيق
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(base_dir, 'inventory.xlsx')
+            
+            if not os.path.exists(file_path):
+                self.lbl_status.text = "Error: inventory.xlsx not found in package!"
+                return
+
+            # قراءة البيانات
+            wb = openpyxl.load_workbook(file_path)
             sheet = wb.active
             
             row_count = 0
@@ -96,7 +64,7 @@ class InventoryApp(App):
                     
             self.lbl_status.text = f"Loaded {row_count} rows successfully!"
         except Exception as e:
-            self.lbl_status.text = f"Error reading file: {str(e)}"
+            self.lbl_status.text = f"Error: {str(e)}"
 
 if __name__ == '__main__':
     InventoryApp().run()
