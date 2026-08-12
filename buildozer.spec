@@ -19,8 +19,7 @@ source.include_exts = py,png,jpg,kv,atlas,xlsx,xls
 version = 0.1
 
 # (list) Application requirements
-requirements = python3,kivy,openpyxl
-
+requirements = python3,kivy,openpyxl,openssl,certifi
 # (list) Supported orientations
 orientation = portrait
 
@@ -28,7 +27,7 @@ orientation = portrait
 fullscreen = 0
 
 # (list) Permissions
-android.permissions = CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
+android.permissions = CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, INTERNET
 
 # (int) Target Android API
 android.api = 33
