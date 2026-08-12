@@ -13,13 +13,13 @@ package.domain = org.fadi
 source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas,xlsx
+source.include_exts = py,png,jpg,kv,atlas,xlsx,ttf
 
 # (str) Application versioning
 version = 1.0
 
 # (list) Application requirements
-requirements = python3,kivy,openpyxl
+requirements = python3,kivy,openpyxl,arabic_reshaper,python-bidi
 
 # (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
 orientation = portrait
