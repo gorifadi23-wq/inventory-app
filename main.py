@@ -22,32 +22,32 @@ def format_arabic(text):
     reshaped = arabic_reshaper.reshape(str(text))
     return get_display(reshaped)
 
-# --- كود الودجة الترحيبية الجديدة (Fadi Icon) ---
 class WelcomeWidget(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
+        self.size_hint_y = None
+        self.height = dp(300)  # ارتفاع ثابت يمنع انهيار الشعار أو اختفائه
         self.padding = dp(40)
         self.spacing = dp(20)
         
-        # دائرة الشعار
-        icon_box = BoxLayout(size_hint=(None, None), size=(dp(150), dp(150)))
+        icon_box = BoxLayout(size_hint=(None, None), size=(dp(120), dp(120)))
         icon_box.pos_hint = {'center_x': 0.5}
         with icon_box.canvas.before:
-            Color(0.1, 0.3, 0.6, 1) # أزرق احترافي
+            Color(0.1, 0.3, 0.6, 1)
             self.circle = Ellipse(pos=icon_box.pos, size=icon_box.size)
         icon_box.bind(pos=self.update_circle, size=icon_box.size)
         
-        # النص داخل الدائرة
-        name_lbl = Label(text="Fadi", font_size=sp(40), bold=True, color=(1,1,1,1))
+        name_lbl = Label(text="Fadi", font_size=sp(32), bold=True, color=(1,1,1,1), halign='center', valign='middle')
+        name_lbl.bind(size=lambda inst, size: setattr(inst, 'text_size', size))
         icon_box.add_widget(name_lbl)
         
-        # رسالة ترحيبية
         msg_lbl = Label(
             text=format_arabic("مرحباً بك يا فادي\nابدأ البحث عن موادك الآن"),
-            font_size=sp(18), color=(0.4, 0.4, 0.4, 1),
+            font_size=sp(16), color=(0.4, 0.4, 0.4, 1),
             halign='center'
         )
+        msg_lbl.bind(size=lambda inst, size: setattr(inst, 'text_size', size))
         
         self.add_widget(icon_box)
         self.add_widget(msg_lbl)
@@ -56,7 +56,6 @@ class WelcomeWidget(BoxLayout):
         self.circle.pos = instance.pos
         self.circle.size = instance.size
 
-# --- باقي الكود ---
 class HeaderLayout(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -136,6 +135,7 @@ class FadiInventoryApp(App):
     def build(self):
         self.title = "Inventory App"
         self.all_data = []
+        self.data_loaded = False  # علم لمنع أي بحث قبل اكتمال التحميل
         self.search_event = None
         
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -153,7 +153,8 @@ class FadiInventoryApp(App):
             size_hint_y=None, height=dp(55), font_size=sp(16), multiline=False,
             padding=[dp(15), dp(15)], halign='right',
             background_normal='', background_color=(1, 1, 1, 1),
-            cursor_color=(0.1, 0.3, 0.6, 1)
+            cursor_color=(0.1, 0.3, 0.6, 1),
+            disabled=True  # معطل لحين انتهاء تحميل البيانات تماماً
         )
         self.search_input.bind(text=self.on_search_change)
         
@@ -162,7 +163,7 @@ class FadiInventoryApp(App):
         main_box.add_widget(search_container)
         
         self.info_label = Label(
-            text=format_arabic("جارٍ تهيئة النظام..."),
+            text=format_arabic("جارٍ تهيئة النظام وتحميل البيانات..."),
             size_hint_y=None, height=dp(30), color=(0.5, 0.5, 0.5, 1), 
             font_size=sp(14), font_name=self.font_path if os.path.exists(self.font_path) else 'Roboto'
         )
@@ -195,13 +196,14 @@ class FadiInventoryApp(App):
     def load_excel_data(self):
         excel_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inventory.xlsx')
         if not os.path.exists(excel_file):
-            self.update_info_label("ملف inventory.xlsx مفقود!", (0.9, 0.1, 0.1, 1))
+            self.update_ui_state("ملف inventory.xlsx مفقود!", (0.9, 0.1, 0.1, 1), enable_search=False)
             return
             
         try:
             workbook = openpyxl.load_workbook(excel_file, data_only=True)
             sheet = workbook.active
             
+            temp_data = []
             for row_idx, row in enumerate(sheet.iter_rows(values_only=True)):
                 if row_idx == 0: continue 
                 
@@ -212,38 +214,55 @@ class FadiInventoryApp(App):
                 
                 full_search_text = f"{code} {name} {unit} {qty}".lower()
                 
-                self.all_data.append({
+                temp_data.append({
                     'code': code,
                     'name': name,
                     'unit': unit,
                     'qty': qty,
                     'search_text': full_search_text
                 })
-                    
-            Clock.schedule_once(lambda dt: self.update_ui(""), 0)
+            
+            self.all_data = temp_data
+            self.data_loaded = True
+            
+            Clock.schedule_once(lambda dt: self.finalize_loading(), 0)
                 
         except Exception as e:
-            self.update_info_label(f"حدث خطأ: {str(e)[:40]}", (0.9, 0.1, 0.1, 1))
+            self.update_ui_state(f"حدث خطأ: {str(e)[:40]}", (0.9, 0.1, 0.1, 1), enable_search=False)
+
+    @mainthread
+    def finalize_loading(self):
+        self.search_input.disabled = False
+        self.update_info_label("جاهز للبحث...", (0.1, 0.3, 0.6, 1))
+        self.data_grid.clear_widgets()
+        self.data_grid.add_widget(WelcomeWidget())
 
     @mainthread
     def update_info_label(self, text, color):
         self.info_label.text = format_arabic(text)
         self.info_label.color = color
 
+    @mainthread
+    def update_ui_state(self, text, color, enable_search):
+        self.info_label.text = format_arabic(text)
+        self.info_label.color = color
+        self.search_input.disabled = not enable_search
+
     def on_search_change(self, instance, value):
+        if not self.data_loaded:
+            return  
         if self.search_event:
             self.search_event.cancel()
-        self.search_event = Clock.schedule_once(lambda dt: self.update_ui(value), 0.3)
+        self.search_event = Clock.schedule_once(lambda dt: self.perform_search(value), 0.3)
 
-    def update_ui(self, search_text):
+    @mainthread
+    def perform_search(self, search_text):
         self.data_grid.clear_widgets()
         
-        # --- تحديث: إظهار شعار Fadi عند عدم وجود بحث ---
         if not search_text or search_text.strip() == "":
             self.update_info_label("جاهز للبحث...", (0.1, 0.3, 0.6, 1))
             self.data_grid.add_widget(WelcomeWidget())
             return
-        # -----------------------------------------------
         
         search_terms = search_text.lower().split()
         displayed_count = 0
@@ -254,7 +273,7 @@ class FadiInventoryApp(App):
                     match = False
                     break
             if match:
-                if displayed_count >= 50: break
+                if displayed_count >= 30: break  
                 card = ProfessionalCard(item_data=item, font_path=self.font_path)
                 self.data_grid.add_widget(card)
                 displayed_count += 1
