@@ -12,11 +12,12 @@ class InventoryApp(App):
         
         root_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
-        # تسمية لحالة التطبيق وعرض عدد الصفوف
+        # شريط الحالة لعرض عدد الصفوف أو الأخطاء
         self.lbl_status = Label(
-            text="Loading inventory data...",
+            text="جاري قراءة البيانات...",
             size_hint_y=None,
-            height=60
+            height=60,
+            color=(1, 1, 1, 1)
         )
         root_layout.add_widget(self.lbl_status)
         
@@ -28,25 +29,25 @@ class InventoryApp(App):
         scroll.add_widget(self.data_layout)
         root_layout.add_widget(scroll)
         
-        # تحميل الملف مباشرة من حزمة التطبيق
-        self.load_bundled_excel()
+        # قراءة الملف من حزمة التطبيق مباشرة
+        self.load_excel()
         
         return root_layout
 
-    def load_bundled_excel(self):
+    def load_excel(self):
         try:
             self.data_layout.clear_widgets()
             
-            # مسار الملف المدمج داخل التطبيق
+            # مسار الملف داخل التطبيق
             base_dir = os.path.dirname(os.path.abspath(__file__))
             file_path = os.path.join(base_dir, 'inventory.xlsx')
             
             if not os.path.exists(file_path):
-                self.lbl_status.text = "Error: inventory.xlsx not found in package!"
+                self.lbl_status.text = "خطأ: ملف inventory.xlsx غير موجود داخل المستودع!"
                 return
 
-            # قراءة البيانات
-            wb = openpyxl.load_workbook(file_path)
+            # فتح الملف وقراءته
+            wb = openpyxl.load_workbook(file_path, data_only=True)
             sheet = wb.active
             
             row_count = 0
@@ -62,9 +63,13 @@ class InventoryApp(App):
                     self.data_layout.add_widget(lbl)
                     row_count += 1
                     
-            self.lbl_status.text = f"Loaded {row_count} rows successfully!"
+            if row_count == 0:
+                self.lbl_status.text = "الملف فارغ أو لا يحتوي على بيانات!"
+            else:
+                self.lbl_status.text = f"تم بنجاح تحميل {row_count} صف!"
+                
         except Exception as e:
-            self.lbl_status.text = f"Error: {str(e)}"
+            self.lbl_status.text = f"خطأ: تأكد أن الملف بصيغة Excel صحيحة"
 
 if __name__ == '__main__':
     InventoryApp().run()
