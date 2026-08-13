@@ -417,12 +417,17 @@ class FadiInventoryApp(App):
 
     def on_file_selected(self, selection):
         # يُستدعى من plyer، قد يكون في ثريد مختلف عن الواجهة الرئيسية
-        if not selection:
+        if not selection or not selection[0]:
+            Clock.schedule_once(lambda dt: self.update_info(
+                "لم يتم استلام الملف من النظام، حاول مجددًا", COLOR_RED))
             return
         picked_path = selection[0]
         Clock.schedule_once(lambda dt: self.handle_new_excel_file(picked_path))
 
     def handle_new_excel_file(self, picked_path):
+        if not picked_path:
+            self.update_info("تعذر الحصول على مسار الملف المختار", COLOR_RED)
+            return
         try:
             # ننسخ الملف إلى مساحة تخزين خاصة بالتطبيق لضمان قدرتنا على قراءته
             # لاحقًا (خاصة إن كان المسار الأصلي عنوان محتوى مؤقت من نظام أندرويد)
