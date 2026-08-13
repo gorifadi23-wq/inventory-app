@@ -1,4 +1,5 @@
 import os
+import shutil
 import threading
 import openpyxl
 from kivy.app import App
@@ -14,6 +15,14 @@ from kivy.metrics import dp, sp
 
 import arabic_reshaper
 from bidi.algorithm import get_display
+
+# plyer.filechooser يفتح منتقي الملفات الأصلي في أندرويد (Storage Access Framework)
+# نستورده بحذر لأنه قد لا يكون متاحًا عند التجربة على سطح المكتب
+try:
+    from plyer import filechooser
+    FILECHOOSER_AVAILABLE = True
+except Exception:
+    FILECHOOSER_AVAILABLE = False
 
 Window.clearcolor = (0.95, 0.95, 0.97, 1)
 
@@ -81,8 +90,8 @@ class WelcomeWidget(BoxLayout):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
         self.size_hint_y = None
-        self.height = dp(280)
-        self.padding = dp(40)
+        self.height = dp(180)
+        self.padding = dp(30)
         self.spacing = dp(15)
 
         icon_box = BoxLayout(size_hint=(None, None), size=(dp(110), dp(110)))
@@ -99,26 +108,6 @@ class WelcomeWidget(BoxLayout):
         icon_box.add_widget(name_lbl)
 
         self.add_widget(icon_box)
-
-        msg = Label(
-            text=format_arabic("جاهز للبحث... اكتب أي جزء من الاسم أو الرمز"),
-            font_name=font_path if os.path.exists(font_path) else 'Roboto',
-            font_size=sp(15),
-            color=COLOR_TEXT_GRAY,
-            halign='center'
-        )
-        msg.bind(size=lambda inst, size: setattr(inst, 'text_size', size))
-        self.add_widget(msg)
-
-        hint = Label(
-            text=format_arabic("مثال: اكتب IGBT ثم أضف 71 للتصفية أكثر (لا يشترط التتابع)"),
-            font_name=font_path if os.path.exists(font_path) else 'Roboto',
-            font_size=sp(12),
-            color=(0.6, 0.62, 0.68, 1),
-            halign='center'
-        )
-        hint.bind(size=lambda inst, size: setattr(inst, 'text_size', size))
-        self.add_widget(hint)
 
     def update_circle(self, instance, value):
         self.circle.pos = instance.pos
@@ -254,6 +243,17 @@ class FadiInventoryApp(App):
         header.bind(pos=lambda i, p: setattr(self.header_rect, 'pos', p),
                     size=lambda i, s: setattr(self.header_rect, 'size', s))
 
+        # زر اختيار/تحديث ملف الإكسل من الجهاز (يظهر على يسار العنوان)
+        self.file_btn = BoxLayout(size_hint=(None, None), size=(dp(40), dp(40)))
+        with self.file_btn.canvas.before:
+            Color(1, 1, 1, 0.15)
+            self.file_btn_circle = Ellipse(pos=self.file_btn.pos, size=self.file_btn.size)
+        self.file_btn.bind(pos=self.update_file_btn_circle, size=self.update_file_btn_circle)
+        file_btn_lbl = Label(text="\U0001F4C1", font_size=sp(18))  # أيقونة مجلد
+        self.file_btn.add_widget(file_btn_lbl)
+        self.file_btn.bind(on_touch_down=self.on_file_btn_touch)
+        header.add_widget(self.file_btn)
+
         header_lbl = Label(
             text=format_arabic("نظام إدارة مخزون قطع الغيار"),
             font_name=self.font_path if os.path.exists(self.font_path) else 'Roboto',
@@ -291,7 +291,7 @@ class FadiInventoryApp(App):
 
         self.search_input = ArabicSearchInput(
             on_raw_text_change=self.on_raw_search_change,
-            hint_text=format_arabic('ابحث بأجزاء الاسم أو الرمز (مثال: igbt 71)'),
+            hint_text='Search',
             font_name=self.font_path if os.path.exists(self.font_path) else 'Roboto',
             font_size=sp(15),
             multiline=False,
@@ -341,15 +341,84 @@ class FadiInventoryApp(App):
         self.clear_circle.pos = instance.pos
         self.clear_circle.size = instance.size
 
+    def update_file_btn_circle(self, instance, value):
+        self.file_btn_circle.pos = instance.pos
+        self.file_btn_circle.size = instance.size
+
     def on_clear_touch(self, instance, touch):
         if instance.collide_point(*touch.pos) and not instance.disabled:
             self.search_input.clear_query()
             return True
         return False
 
-    def load_data(self):
+    # ---------- إدارة مسار ملف الإكسل المخصص ----------
+
+    def config_file_path(self):
+        return os.path.join(self.user_data_dir, 'config.txt')
+
+    def get_saved_excel_path(self):
+        cfg = self.config_file_path()
+        if os.path.exists(cfg):
+            try:
+                with open(cfg, 'r', encoding='utf-8') as f:
+                    saved_path = f.read().strip()
+                if saved_path and os.path.exists(saved_path):
+                    return saved_path
+            except Exception:
+                pass
+        return None
+
+    def save_excel_path(self, path):
+        try:
+            with open(self.config_file_path(), 'w', encoding='utf-8') as f:
+                f.write(path)
+        except Exception:
+            pass
+
+    def on_file_btn_touch(self, instance, touch):
+        if not instance.collide_point(*touch.pos):
+            return False
+        if not FILECHOOSER_AVAILABLE:
+            self.update_info("ميزة اختيار الملف غير متاحة على هذا الجهاز", COLOR_RED)
+            return True
+        try:
+            filechooser.open_file(
+                on_selection=self.on_file_selected,
+                filters=[("Excel Files", "*.xlsx")]
+            )
+        except Exception as e:
+            self.update_info(f"تعذر فتح منتقي الملفات: {e}", COLOR_RED)
+        return True
+
+    def on_file_selected(self, selection):
+        # يُستدعى من plyer، قد يكون في ثريد مختلف عن الواجهة الرئيسية
+        if not selection:
+            return
+        picked_path = selection[0]
+        Clock.schedule_once(lambda dt: self.handle_new_excel_file(picked_path))
+
+    def handle_new_excel_file(self, picked_path):
+        try:
+            # ننسخ الملف إلى مساحة تخزين خاصة بالتطبيق لضمان قدرتنا على قراءته
+            # لاحقًا (خاصة إن كان المسار الأصلي عنوان محتوى مؤقت من نظام أندرويد)
+            dest = os.path.join(self.user_data_dir, 'selected_inventory.xlsx')
+            shutil.copyfile(picked_path, dest)
+            self.save_excel_path(dest)
+            self.loading_complete = False
+            self.search_input.disabled = True
+            self.update_info("جاري تحديث البيانات من الملف الجديد...", COLOR_PRIMARY)
+            threading.Thread(target=self.load_data, args=(dest,), daemon=True).start()
+        except Exception as e:
+            self.update_info(f"تعذر تحميل الملف المختار: {e}", COLOR_RED)
+
+    # ---------- تحميل البيانات ----------
+
+    def load_data(self, path=None):
         temp_data = []
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inventory.xlsx')
+        if path is None:
+            path = self.get_saved_excel_path() or os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), 'inventory.xlsx'
+            )
         try:
             wb = openpyxl.load_workbook(path, data_only=True)
             sheet = wb.active
@@ -387,6 +456,7 @@ class FadiInventoryApp(App):
     @mainthread
     def on_load_finished(self, dt):
         self.search_input.disabled = False
+        self.search_input.clear_query()
         self.info_label.text = format_arabic(f"جاهز للبحث — {len(self.searchable_data)} مادة محمّلة")
         self.info_label.color = COLOR_PRIMARY
         self.data_grid.clear_widgets()
