@@ -19,7 +19,10 @@ source.include_exts = py,png,jpg,kv,atlas,xlsx,ttf
 version = 1.0
 
 # (list) Application requirements
-requirements = python3,kivy,openpyxl,arabic_reshaper,python-bidi,plyer
+# ملاحظة: نستخدم نسخة GitHub الرئيسية لمكتبة plyer بدل نسخة PyPI،
+# لأن نسخة PyPI المنشورة فيها خلل معروف يجعل منتقي ملفات أندرويد
+# (filechooser) يعيد نتيجة فارغة (None) بدل مسار الملف المختار فعليًا.
+requirements = python3,kivy,openpyxl,arabic_reshaper,python-bidi,git+https://github.com/kivy/plyer.git
 
 # (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
 orientation = portrait
