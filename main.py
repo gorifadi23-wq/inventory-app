@@ -24,6 +24,14 @@ try:
 except Exception:
     FILECHOOSER_AVAILABLE = False
 
+# طلب صلاحيات التخزين وقت التشغيل (مطلوب على أندرويد 6+ حتى لو كانت
+# الصلاحية مُعرَّفة في buildozer.spec — التعريف وحده لا يكفي)
+try:
+    from android.permissions import request_permissions, Permission, check_permission
+    ANDROID_PERMISSIONS_AVAILABLE = True
+except Exception:
+    ANDROID_PERMISSIONS_AVAILABLE = False
+
 Window.clearcolor = (0.95, 0.95, 0.97, 1)
 
 # ألوان الهوية العامة للتطبيق (طابع محاسبي احترافي)
@@ -83,6 +91,28 @@ class ArabicSearchInput(TextInput):
         self._updating = False
         if self.on_raw_text_change:
             self.on_raw_text_change(self.raw_query)
+
+
+class FolderIcon(BoxLayout):
+    """أيقونة مجلد مرسومة يدويًا بخطوط Kivy الرسومية بدل الاعتماد على إيموجي،
+    لضمان ظهورها بشكل صحيح على جميع الأجهزة والخطوط."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            Color(1, 1, 1, 0.95)
+            self.tab_rect = Rectangle()
+            self.body_rect = Rectangle()
+        self.bind(pos=self.update_shape, size=self.update_shape)
+
+    def update_shape(self, *args):
+        x, y = self.pos
+        w, h = self.size
+        # الجزء العلوي الصغير من المجلد (اللسان)
+        self.tab_rect.pos = (x + w * 0.12, y + h * 0.55)
+        self.tab_rect.size = (w * 0.35, h * 0.12)
+        # جسم المجلد
+        self.body_rect.pos = (x + w * 0.12, y + h * 0.18)
+        self.body_rect.size = (w * 0.76, h * 0.45)
 
 
 class WelcomeWidget(BoxLayout):
@@ -244,13 +274,14 @@ class FadiInventoryApp(App):
                     size=lambda i, s: setattr(self.header_rect, 'size', s))
 
         # زر اختيار/تحديث ملف الإكسل من الجهاز (يظهر على يسار العنوان)
-        self.file_btn = BoxLayout(size_hint=(None, None), size=(dp(40), dp(40)))
+        self.file_btn = BoxLayout(size_hint=(None, None), size=(dp(40), dp(40)),
+                                   padding=dp(8))
         with self.file_btn.canvas.before:
             Color(1, 1, 1, 0.15)
             self.file_btn_circle = Ellipse(pos=self.file_btn.pos, size=self.file_btn.size)
         self.file_btn.bind(pos=self.update_file_btn_circle, size=self.update_file_btn_circle)
-        file_btn_lbl = Label(text="\U0001F4C1", font_size=sp(18))  # أيقونة مجلد
-        self.file_btn.add_widget(file_btn_lbl)
+        folder_icon = FolderIcon(size_hint=(1, 1))
+        self.file_btn.add_widget(folder_icon)
         self.file_btn.bind(on_touch_down=self.on_file_btn_touch)
         header.add_widget(self.file_btn)
 
@@ -331,7 +362,19 @@ class FadiInventoryApp(App):
         main_box.add_widget(self.scroll)
 
         threading.Thread(target=self.load_data, daemon=True).start()
+        self.request_storage_permissions()
         return main_box
+
+    def request_storage_permissions(self):
+        if not ANDROID_PERMISSIONS_AVAILABLE:
+            return
+        try:
+            request_permissions([
+                Permission.READ_EXTERNAL_STORAGE,
+                Permission.WRITE_EXTERNAL_STORAGE,
+            ])
+        except Exception:
+            pass
 
     def update_search_bg(self, instance, value):
         self.search_bg.pos = instance.pos
@@ -381,6 +424,14 @@ class FadiInventoryApp(App):
         if not FILECHOOSER_AVAILABLE:
             self.update_info("ميزة اختيار الملف غير متاحة على هذا الجهاز", COLOR_RED)
             return True
+        if ANDROID_PERMISSIONS_AVAILABLE:
+            try:
+                if not check_permission(Permission.READ_EXTERNAL_STORAGE):
+                    self.request_storage_permissions()
+                    self.update_info("يرجى منح صلاحية التخزين ثم الضغط على الزر مجددًا", COLOR_RED)
+                    return True
+            except Exception:
+                pass
         try:
             filechooser.open_file(
                 on_selection=self.on_file_selected,
