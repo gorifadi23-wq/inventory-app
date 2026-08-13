@@ -36,6 +36,46 @@ def format_arabic(text):
     return get_display(arabic_reshaper.reshape(str(text)))
 
 
+class ArabicSearchInput(TextInput):
+    """
+    مربع بحث مخصص يحل مشكلة عدم دعم Kivy لتشكيل واتجاه النص العربي أثناء الكتابة.
+    يحتفظ بالنص الخام (raw_query) لأغراض البحث، بينما يعرض نسخة معاد تشكيلها
+    (format_arabic) للمستخدم. المؤشر يبقى دائمًا في نهاية النص المعروض، وهو
+    تنازل مقبول لمربع بحث (لا يحتاج المستخدم عادة للتعديل في منتصف الكلمة).
+    """
+    def __init__(self, on_raw_text_change=None, **kwargs):
+        super().__init__(**kwargs)
+        self.raw_query = ""
+        self._updating = False
+        self.on_raw_text_change = on_raw_text_change
+
+    def insert_text(self, substring, from_undo=False):
+        if self._updating:
+            return super().insert_text(substring, from_undo=from_undo)
+        self.raw_query += substring
+        self._refresh_display()
+
+    def do_backspace(self, from_undo=False, mode='bkspc'):
+        if self._updating:
+            return
+        if self.raw_query:
+            self.raw_query = self.raw_query[:-1]
+        self._refresh_display()
+
+    def clear_query(self):
+        self.raw_query = ""
+        self._refresh_display()
+
+    def _refresh_display(self):
+        self._updating = True
+        display = format_arabic(self.raw_query) if self.raw_query else ""
+        self.text = display
+        self.cursor = (len(display), 0)
+        self._updating = False
+        if self.on_raw_text_change:
+            self.on_raw_text_change(self.raw_query)
+
+
 class WelcomeWidget(BoxLayout):
     def __init__(self, font_path, **kwargs):
         super().__init__(**kwargs)
@@ -229,13 +269,28 @@ class FadiInventoryApp(App):
 
         # مربع البحث
         search_container = BoxLayout(size_hint_y=None, height=dp(64),
-                                      padding=[dp(15), dp(8), dp(15), dp(8)])
+                                      padding=[dp(15), dp(8), dp(15), dp(8)],
+                                      spacing=dp(8))
         with search_container.canvas.before:
             Color(1, 1, 1, 1)
             self.search_bg = RoundedRectangle(radius=[dp(8)])
         search_container.bind(pos=self.update_search_bg, size=self.update_search_bg)
 
-        self.search_input = TextInput(
+        # زر مسح النص (✕) — يظهر على يسار المربع ويمسح البحث بالكامل فورًا
+        self.clear_btn = BoxLayout(size_hint=(None, None), size=(dp(36), dp(36)))
+        self.clear_btn.opacity = 0
+        self.clear_btn.disabled = True
+        with self.clear_btn.canvas.before:
+            Color(0.85, 0.87, 0.9, 1)
+            self.clear_circle = Ellipse(pos=self.clear_btn.pos, size=self.clear_btn.size)
+        self.clear_btn.bind(pos=self.update_clear_circle, size=self.update_clear_circle)
+        clear_lbl = Label(text="X", bold=True, color=(0.35, 0.37, 0.42, 1), font_size=sp(15))
+        self.clear_btn.add_widget(clear_lbl)
+        self.clear_btn.bind(on_touch_down=self.on_clear_touch)
+        search_container.add_widget(self.clear_btn)
+
+        self.search_input = ArabicSearchInput(
+            on_raw_text_change=self.on_raw_search_change,
             hint_text=format_arabic('ابحث بأجزاء الاسم أو الرمز (مثال: igbt 71)'),
             font_name=self.font_path if os.path.exists(self.font_path) else 'Roboto',
             font_size=sp(15),
@@ -249,7 +304,6 @@ class FadiInventoryApp(App):
             cursor_color=COLOR_PRIMARY,
             disabled=True
         )
-        self.search_input.bind(text=self.on_search_change)
         search_container.add_widget(self.search_input)
         main_box.add_widget(search_container)
 
@@ -282,6 +336,16 @@ class FadiInventoryApp(App):
     def update_search_bg(self, instance, value):
         self.search_bg.pos = instance.pos
         self.search_bg.size = instance.size
+
+    def update_clear_circle(self, instance, value):
+        self.clear_circle.pos = instance.pos
+        self.clear_circle.size = instance.size
+
+    def on_clear_touch(self, instance, touch):
+        if instance.collide_point(*touch.pos) and not instance.disabled:
+            self.search_input.clear_query()
+            return True
+        return False
 
     def load_data(self):
         temp_data = []
@@ -333,13 +397,19 @@ class FadiInventoryApp(App):
         self.info_label.text = format_arabic(text)
         self.info_label.color = color
 
-    def on_search_change(self, instance, value):
+    def on_raw_search_change(self, raw_value):
+        """يُستدعى من ArabicSearchInput بالنص الخام الفعلي (غير المُعاد تشكيله)."""
         if not self.loading_complete:
             return
+        # إظهار/إخفاء زر المسح ديناميكيًا حسب وجود نص
+        has_text = bool(raw_value and raw_value.strip())
+        self.clear_btn.opacity = 1 if has_text else 0
+        self.clear_btn.disabled = not has_text
+
         # إلغاء أي بحث مجدول سابق لضمان عدم تراكم عمليات البحث أثناء الكتابة السريعة
         if self._search_event is not None:
             self._search_event.cancel()
-        self._search_event = Clock.schedule_once(lambda dt: self.perform_search(value), 0.2)
+        self._search_event = Clock.schedule_once(lambda dt: self.perform_search(raw_value), 0.2)
 
     @mainthread
     def perform_search(self, query):
