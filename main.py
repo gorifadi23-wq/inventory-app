@@ -24,14 +24,6 @@ try:
 except Exception:
     FILECHOOSER_AVAILABLE = False
 
-# طلب صلاحيات التخزين وقت التشغيل (مطلوب على أندرويد 6+ حتى لو كانت
-# الصلاحية مُعرَّفة في buildozer.spec — التعريف وحده لا يكفي)
-try:
-    from android.permissions import request_permissions, Permission, check_permission
-    ANDROID_PERMISSIONS_AVAILABLE = True
-except Exception:
-    ANDROID_PERMISSIONS_AVAILABLE = False
-
 Window.clearcolor = (0.95, 0.95, 0.97, 1)
 
 # ألوان الهوية العامة للتطبيق (طابع محاسبي احترافي)
@@ -362,19 +354,7 @@ class FadiInventoryApp(App):
         main_box.add_widget(self.scroll)
 
         threading.Thread(target=self.load_data, daemon=True).start()
-        self.request_storage_permissions()
         return main_box
-
-    def request_storage_permissions(self):
-        if not ANDROID_PERMISSIONS_AVAILABLE:
-            return
-        try:
-            request_permissions([
-                Permission.READ_EXTERNAL_STORAGE,
-                Permission.WRITE_EXTERNAL_STORAGE,
-            ])
-        except Exception:
-            pass
 
     def update_search_bg(self, instance, value):
         self.search_bg.pos = instance.pos
@@ -424,14 +404,8 @@ class FadiInventoryApp(App):
         if not FILECHOOSER_AVAILABLE:
             self.update_info("ميزة اختيار الملف غير متاحة على هذا الجهاز", COLOR_RED)
             return True
-        if ANDROID_PERMISSIONS_AVAILABLE:
-            try:
-                if not check_permission(Permission.READ_EXTERNAL_STORAGE):
-                    self.request_storage_permissions()
-                    self.update_info("يرجى منح صلاحية التخزين ثم الضغط على الزر مجددًا", COLOR_RED)
-                    return True
-            except Exception:
-                pass
+        # ملاحظة: منتقي الملفات (SAF) لا يحتاج صلاحية تخزين كاملة على
+        # أندرويد الحديث — يمنح وصولًا للملف المختار فقط، لذا نفتحه مباشرة
         try:
             filechooser.open_file(
                 on_selection=self.on_file_selected,
