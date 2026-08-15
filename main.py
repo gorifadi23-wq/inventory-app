@@ -121,7 +121,6 @@ class WelcomeWidget(BoxLayout):
         with icon_box.canvas.before:
             Color(*COLOR_PRIMARY)
             self.circle = Ellipse(pos=icon_box.pos, size=icon_box.size)
-        # (تم إصلاح الخطأ هنا: الربط الآن بدالة صحيحة بدل قيمة ثابتة)
         icon_box.bind(pos=self.update_circle, size=self.update_circle)
 
         name_lbl = Label(text="Fadi", font_size=sp(30), bold=True,
@@ -404,19 +403,16 @@ class FadiInventoryApp(App):
         if not FILECHOOSER_AVAILABLE:
             self.update_info("ميزة اختيار الملف غير متاحة على هذا الجهاز", COLOR_RED)
             return True
-        # ملاحظة: منتقي الملفات (SAF) لا يحتاج صلاحية تخزين كاملة على
-        # أندرويد الحديث — يمنح وصولًا للملف المختار فقط، لذا نفتحه مباشرة
         try:
             filechooser.open_file(
                 on_selection=self.on_file_selected,
-                filters=[("Excel Files", "*.xlsx")]
+                filters=[("Excel Files", "*.xlsx", "*.xls")]
             )
         except Exception as e:
             self.update_info(f"تعذر فتح منتقي الملفات: {e}", COLOR_RED)
         return True
 
     def on_file_selected(self, selection):
-        # يُستدعى من plyer، قد يكون في ثريد مختلف عن الواجهة الرئيسية
         if not selection or not selection[0]:
             Clock.schedule_once(lambda dt: self.update_info(
                 "لم يتم استلام الملف من النظام، حاول مجددًا", COLOR_RED))
@@ -429,14 +425,24 @@ class FadiInventoryApp(App):
             self.update_info("تعذر الحصول على مسار الملف المختار", COLOR_RED)
             return
         try:
-            # ننسخ الملف إلى مساحة تخزين خاصة بالتطبيق لضمان قدرتنا على قراءته
-            # لاحقًا (خاصة إن كان المسار الأصلي عنوان محتوى مؤقت من نظام أندرويد)
+            # نسخ الملف المختار مباشرة إلى مجلد التطبيق الداخلي لضمان إمكانية قراءته بنجاح
             dest = os.path.join(self.user_data_dir, 'selected_inventory.xlsx')
+            
+            # إذا كان نفس الملف، نحذفه مؤقتاً لضمان تحديثه بنسخة جديدة
+            if os.path.exists(dest):
+                try:
+                    os.remove(dest)
+                except Exception:
+                    pass
+
             shutil.copyfile(picked_path, dest)
             self.save_excel_path(dest)
+            
             self.loading_complete = False
             self.search_input.disabled = True
             self.update_info("جاري تحديث البيانات من الملف الجديد...", COLOR_PRIMARY)
+            
+            # تمرير المسار الجديد صراحةً لدالة التحميل
             threading.Thread(target=self.load_data, args=(dest,), daemon=True).start()
         except Exception as e:
             self.update_info(f"تعذر تحميل الملف المختار: {e}", COLOR_RED)
@@ -445,10 +451,13 @@ class FadiInventoryApp(App):
 
     def load_data(self, path=None):
         temp_data = []
+        
+        # تحديد المسار بدقة: إذا لم يُرسل مسار، نبحث عن الملف المحفوظ مسبقاً، وإلا فالملف الافتراضي المدمج
         if path is None:
-            path = self.get_saved_excel_path() or os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), 'inventory.xlsx'
-            )
+            path = self.get_saved_excel_path()
+            if not path or not os.path.exists(path):
+                path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inventory.xlsx')
+
         try:
             wb = openpyxl.load_workbook(path, data_only=True)
             sheet = wb.active
@@ -460,7 +469,6 @@ class FadiInventoryApp(App):
                     unit = str(row[5]) if len(row) > 5 and row[5] is not None else '-'
                     qty = str(row[6]) if len(row) > 6 and row[6] is not None else '0'
 
-                    # دمج كافة محتويات الأعمدة المتوفرة في نص بحث شامل
                     all_row_text = " ".join(
                         [str(cell) for cell in row if cell is not None]
                     ).lower()
@@ -473,7 +481,6 @@ class FadiInventoryApp(App):
                         'search': all_row_text
                     })
                 except Exception:
-                    # صف فاسد لا يوقف تحميل باقي الملف
                     skipped += 1
                     continue
 
@@ -498,15 +505,12 @@ class FadiInventoryApp(App):
         self.info_label.color = color
 
     def on_raw_search_change(self, raw_value):
-        """يُستدعى من ArabicSearchInput بالنص الخام الفعلي (غير المُعاد تشكيله)."""
         if not self.loading_complete:
             return
-        # إظهار/إخفاء زر المسح ديناميكيًا حسب وجود نص
         has_text = bool(raw_value and raw_value.strip())
         self.clear_btn.opacity = 1 if has_text else 0
         self.clear_btn.disabled = not has_text
 
-        # إلغاء أي بحث مجدول سابق لضمان عدم تراكم عمليات البحث أثناء الكتابة السريعة
         if self._search_event is not None:
             self._search_event.cancel()
         self._search_event = Clock.schedule_once(lambda dt: self.perform_search(raw_value), 0.2)
@@ -526,8 +530,6 @@ class FadiInventoryApp(App):
                 self.data_grid.add_widget(WelcomeWidget(self.font_path))
                 return
 
-            # بحث ذكي: كل كلمة/جزء مكتوب (مفصول بمسافة) يجب أن يكون موجودًا
-            # في أي مكان بالسطر، دون اشتراط التتابع أو الترتيب
             search_terms = query.lower().split()
             count = 0
 
